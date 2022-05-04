@@ -3,9 +3,14 @@ import { LoadingIcon } from './Icons';
 import { getProducts } from './dataService';
 import { useEffect, useState } from 'react';
 
-const Product = ({ id, name, availableCount, price, orderedQuantity, total, updateSummary, formatAmount }) => {
-  const addBtnDisabled = availableCount - orderedQuantity === 0;
-  const subBtnDisabled = orderedQuantity === 0;
+const formatAmount = amt => {
+  return new Intl.NumberFormat('en-US', { style: 'decimal', maximumFractionDigits: 2, minimumFractionDigits: 2}).format(amt);
+}
+
+const Product = ({ id, name, availableCount, price, orderedQuantity, total, updateQuantity }) => {
+  const addBtnDisabled = orderedQuantity === availableCount;
+  const subBtnDisabled = orderedQuantity < 1;
+  
   return (
     <tr>
       <td>{id}</td>
@@ -15,8 +20,8 @@ const Product = ({ id, name, availableCount, price, orderedQuantity, total, upda
       <td>{orderedQuantity}</td>   
       <td>${formatAmount(total)}</td>
       <td>
-        <button disabled={addBtnDisabled} onClick={ () => updateSummary(id, 'add')} className={styles.actionButton}>+</button>
-        <button disabled={subBtnDisabled} onClick={ () => updateSummary(id, 'sub')} className={styles.actionButton}>-</button>
+        <button disabled={addBtnDisabled} onClick={ () => updateQuantity(id, 'add')} className={styles.actionButton}>+</button>
+        <button disabled={subBtnDisabled} onClick={ () => updateQuantity(id, 'sub')} className={styles.actionButton}>-</button>
       </td>
     </tr>    
   );
@@ -24,60 +29,56 @@ const Product = ({ id, name, availableCount, price, orderedQuantity, total, upda
 
 
 const Checkout = () => {
-  const [ products, setProducts ] = useState([]);
+  const [ products, setProducts ] = useState({});
   const [loading, setLoading ] = useState(false);
-  const [ summary, setSummary ] = useState({
-    total: 0,
-    discount: 0,
-  });
-
-  const updateSummary = (productId, action) => {
-    setProducts( products.map( product => {
-      if(product.id === productId){
-
-        if(action === 'add'){
-          product.orderedQuantity += 1;
-          product.total = product.orderedQuantity * product.price;
-        }
-        else if(action === 'sub'){
-          product.orderedQuantity -= 1;
-          product.total = product.orderedQuantity * product.price;
-        }
-      }
   
-      return product;
-    }));
+  const getSummary = () => {
+    let total = Object.values(products).reduce( (prev, curr) => prev + curr.total, 0);
+    console.log(total);
+    let discount = total > 1000 ? total * 0.1 : 0; 
+    total = total > 1000 ? total * 0.9 : total;
+
+    return {
+      total,
+      discount,
+    };
   }
 
-  function formatAmount(amt){
-    return new Intl.NumberFormat('en-US', { style: 'decimal', maximumFractionDigits: 2, minimumFractionDigits: 2}).format(amt);
+  const summary = getSummary();
+
+  const updateQuantity = (productId, action) => {
+    if(action === 'add'){
+      let p = products[productId];
+      p.orderedQuantity += 1;
+      p.total = p.orderedQuantity * p.price;
+
+      setProducts({...products, [productId]:p})
+    }
+
+    if(action === 'sub'){
+      let p = products[productId];
+      p.orderedQuantity -= 1;
+      p.total = p.orderedQuantity * p.price;
+      
+      setProducts({...products, [productId]:p})
+    }
   }
-
-  useEffect(() => {
-    const total = products.reduce( (val, product) => {
-      val += product.total;
-      return val;
-    }, 0);
-
-    setSummary({
-      discount: total > 1000 ? total * 0.1 : 0,
-      total: total > 1000 ? (total * 0.9) : total,
-    });
-  }, [products]);
 
   useEffect( () => {
     setLoading(true);
     getProducts()
       .then( res => {
-        setProducts( res.map( product => {
-          product.total = 0;
-          product.orderedQuantity = 0;
+        const normalized = {};
 
-          return product;
-        }));
+        res.forEach( product => {
+          let p = {...product, orderedQuantity: 0, total: 0 }
+          normalized[product.id] = p;
+        });
+
+        setProducts(normalized);
       })
-      .catch( e => console.log(e))
-      .finally(() => setLoading(false));
+        .catch( e => console.log(e))
+          .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -102,7 +103,7 @@ const Checkout = () => {
           </thead>
           <tbody>
           {
-            products.map( product => <Product key={product.id} {...product} formatAmount={formatAmount} updateSummary={updateSummary} />)
+            Object.values(products).map( product => <Product key={product.id} {...product} updateQuantity={updateQuantity} />)
           }
           </tbody>
         </table>
